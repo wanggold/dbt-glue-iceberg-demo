@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  # Warm-up model
+  - name: session_warmup
+    description: |
+      Simple warm-up query to initialize Glue Interactive Session.
+      Ensures fair performance comparison by pre-warming the session.
+
+  # Performance test models - each creates individual table
+  - name: flattened_transactions
+    description: |
+      LEGACY APPROACH: JSON flattening using json_extract_scalar() functions.
+      Performance characteristics:
+      - 60+ individual JSON parsing operations per record
+      - Multiple json_extract_scalar() calls
+      - Expected to be slowest approach
+    
+  - name: optimized_flattened_transactions
+    description: |
+      OPTIMIZED APPROACH: JSON flattening using from_json() with explicit schema.
+      Performance improvements:
+      - Single JSON parse operation per record
+      - Explicit schema definition
+      - Expected 10-50x performance improvement
+      
+  - name: macro_based_flattened_transactions
+    description: |
+      MACRO-BASED APPROACH: Optimized JSON flattening with reusable schema.
+      Features:
+      - Single JSON parse operation per record
+      - Centralized schema definition via macro
+      - Business-focused field selection
+      - Expected similar performance to optimized approach

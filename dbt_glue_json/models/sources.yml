@@ -1,0 +1,26 @@
+version: 2
+
+sources:
+  - name: json_source
+    description: JSON dataset source from dbt-glue-json-db
+    schema: "`dbt-glue-json-db`"  # Quote database name with hyphens
+
+    tables:
+      - name: sample_json_data
+        description: Sample dataset with JSON string column containing transaction data
+        columns:
+          - name: id
+            description: Record identifier
+            data_type: bigint
+          - name: data
+            description: JSON string column containing all transaction data
+            data_type: string
+          - name: created_date
+            description: Date partition field
+            data_type: string
+          - name: year
+            description: Year partition field
+            data_type: bigint
+          - name: month
+            description: Month partition field
+            data_type: bigint

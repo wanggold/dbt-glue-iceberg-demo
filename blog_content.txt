@@ -1,0 +1,321 @@
+      Build and manage your modern data stack using dbt and AWS Glue through dbt-glue, the new “trusted” dbt adapter 
+       by Noritaka Sekiyama, Akira Ajisaka, Jason Ganz, Kinshuk Pahare, and Benjamin Menuet 
+       on 29 NOV 2023 
+       in Analytics, AWS Glue, Intermediate (200) 
+       Permalink 
+        Comments  
+        Share 
+       dbt is an open source, SQL-first templating engine that allows you to write repeatable and extensible data transforms in Python and SQL. dbt focuses on the transform layer of extract, load, transform (ELT) or extract, transform, load (ETL) processes across data warehouses and databases through specific engine adapters to achieve extract and load functionality. It enables data engineers, data scientists, and analytics engineers to define the business logic with SQL select statements and eliminates the need to write boilerplate data manipulation language (DML) and data definition language (DDL) expressions. dbt lets data engineers quickly and collaboratively deploy analytics code following software engineering best practices like modularity, portability, continuous integration and continuous delivery (CI/CD), and documentation. 
+       dbt is predominantly used by data warehouses (such as Amazon Redshift) customers who are looking to keep their data transform logic separate from storage and engine. We have seen a strong customer demand to expand its scope to cloud-based data lakes because data lakes are increasingly the enterprise solution for large-scale data initiatives due to their power and capabilities. 
+       In 2022, AWS published a dbt adapter called dbt-glue—the open source, battle-tested dbt AWS Glue adapter that allows data engineers to use dbt for cloud-based data lakes along with data warehouses and databases, paying for just the compute they need. The dbt-glue adapter democratized access for dbt users to data lakes, and enabled many users to effortlessly run their transformation workloads on the cloud with the serverless data integration capability of AWS Glue. From the launch of the adapter, AWS has continued investing into dbt-glue to cover more requirements. 
+       Today, we are pleased to announce that the dbt-glue adapter is now a trusted adapter based on our strategic collaboration with dbt Labs. Trusted adapters are adapters not maintained by dbt Labs, but adaptors that that dbt Lab is comfortable recommending to users for use in production. 
+       The key capabilities of the dbt-glue adapter are as follows: 
+        Runs SQL as Spark SQL on AWS Glue interactive sessions 
+        Manages table definitions on the Amazon SageMaker Lakehouse Catalog with storage on Amazon S3 
+        Supports open table formats such as Apache Hudi, Delta Lake, and Apache Iceberg 
+        Supports AWS Lake Formation permissions for fine-grained access control 
+       In addition to those capabilities, the dbt-glue adapter is designed to optimize resource utilization with several techniques on top of AWS Glue interactive sessions. 
+       This post demonstrates how the dbt-glue adapter helps your workload, and how you can build a modern data stack using dbt and AWS Glue using the dbt-glue adapter. 
+       Common use cases 
+       One common use case for using dbt-glue is if a central analytics team at a large corporation is responsible for monitoring operational efficiency. They ingest application logs into raw Parquet tables in an Amazon Simple Storage Service (Amazon S3) data lake. Additionally, they extract organized data from operational systems capturing the company’s organizational structure and costs of diverse operational components that they stored in the raw zone using Iceberg tables to maintain the original schema, facilitating easy access to the data. The team uses dbt-glue to build a transformed gold model optimized for business intelligence (BI). The gold model joins the technical logs with billing data and organizes the metrics per business unit. The gold model uses Iceberg’s ability to support data warehouse-style modeling needed for performant BI analytics in a data lake. The combination of Iceberg and dbt-glue allows the team to efficiently build a data model that’s ready to be consumed. 
+       Another common use case is when an analytics team in a company that has an S3 data lake creates a new data product in order to enrich its existing data from its data lake with medical data. Let’s say that this company is located in Europe and the data product must comply with the GDPR. For this, the company uses Iceberg to meet needs such as the right to be forgotten and the deletion of data. The company uses dbt to model its data product on its existing data lake due to its compatibility with AWS Glue and Iceberg and the simplicity that the dbt-glue adapter brings to the use of this storage format. 
+       How dbt and dbt-glue work 
+       The following are key dbt features: 
+        Project – A dbt project enforces a top-level structure on the staging, models, permissions, and adapters. A project can be checked into a GitHub repo for version control. 
+        SQL – dbt relies on SQL select statements for defining data transformation logic. Instead of raw SQL, dbt offers templatized SQL (using Jinja) that allows code modularity. Instead of having to copy/paste SQL in multiple places, data engineers can define modular transforms and call those from other places within the project. Having a modular pipeline helps data engineers collaborate on the same project. 
+        Models – dbt models are primarily written as a SELECT statement and saved as a .sql file. Data engineers define dbt models for their data representations. To learn more, refer to About dbt models. 
+        Materializations – Materializations are strategies for persisting dbt models in a warehouse. There are five types of materializations built into dbt: table, view, incremental, ephemeral, and materialized view. To learn more, refer to Materializations and Incremental models. 
+        Data lineage – dbt tracks data lineage, allowing you to understand the origin of data and how it flows through different transformations. dbt also supports impact analysis, which helps identify the downstream effects of changes. 
+       The high-level data flow is as follows: 
+        Data engineers ingest data from data sources to raw tables and define table definitions for the raw tables. 
+        Data engineers write dbt models with templatized SQL. 
+        The dbt adapter converts dbt models to SQL statements compatible in a data warehouse. 
+        The data warehouse runs the SQL statements to create intermediate tables or final tables, views, or materialized views. 
+       The following diagram illustrates the architecture. 
+       dbt-glue works with the following steps: 
+        The dbt-glue adapter converts dbt models to SQL statements compatible in Spark SQL. 
+        AWS Glue interactive sessions run the SQL statements to create intermediate tables or final tables, views, or materialized views. 
+        dbt-glue supports csv, parquet, hudi, delta, and iceberg as fileformat. 
+        On the dbt-glue adapter, table or incremental are commonly used for materializations at the destination. There are three strategies for incremental materialization. The merge strategy requires hudi, delta, or iceberg. With the other two strategies, append and insert_overwrite, you can use csv, parquet, hudi, delta, or iceberg. 
+       The following diagram illustrates this architecture. 
+       Example use case 
+       In this post, we use the data from the New York City Taxi Records dataset. This dataset is available in the Registry of Open Data on AWS (RODA), which is a repository containing public datasets from AWS resources. The raw Parquet table records in this dataset stores trip records. 
+       The objective is to create the following three tables, which contain metrics based on the raw table: 
+        silver_avg_metrics – Basic metrics based on NYC Taxi Open Data for the year 2016 
+        gold_passengers_metrics – Metrics per passenger based on the silver metrics table 
+        gold_cost_metrics – Metrics per cost based on the silver metrics table 
+       The final goal is to create two well-designed gold tables that store already aggregated results in Iceberg format for ad hoc queries through Amazon Athena. 
+       Prerequisites 
+       The instruction requires following prerequisites: 
+        An AWS Identity and Access Management (IAM) role with all the mandatory permissions to run an AWS Glue interactive session and the dbt-glue adapter 
+        An AWS Glue database and table to store the metadata related to the NYC taxi records dataset 
+        An S3 bucket to use as output and store the processed data 
+        An Athena configuration (a workgroup and S3 bucket to store the output) to explore the dataset 
+        An AWS Lambda function (created as an AWS CloudFormation custom resource) that updates all the partitions in the AWS Glue table 
+       With these prerequisites, we simulate the situation that data engineers have already ingested data from data sources to raw tables, and defined table definitions for the raw tables. 
+       For ease of use, we prepared a CloudFormation template. This template deploys all the required infrastructure. To create these resources, choose Launch Stack in the us-east-1 Region, and follow the instructions: 
+       Install dbt, the dbt CLI, and the dbt adaptor 
+       The dbt CLI is a command line interface for running dbt projects. It’s free to use and available as an open source project. Install dbt and the dbt CLI with the following code: 
+        $ pip3 install --no-cache-dir dbt-core 
+       For more information, refer to How to install dbt, What is dbt?, and Viewpoint. 
+       Install the dbt adapter with the following code: 
+        $ pip3 install --no-cache-dir dbt-glue 
+       Create a dbt project 
+       Complete the following steps to create a dbt project: 
+        Run the dbt init command to create and initialize a new empty dbt project: 
+          $ dbt init 
+        For the project name, enter dbt_glue_demo. 
+        For the database, choose glue. 
+       Now the empty project has been created. The directory structure is shown as follows: 
+        $ cd dbt_glue_demo 
+$ tree .
+.
+├── README.md
+├── analyses
+├── dbt_project.yml
+├── macros
+├── models
+│   └── example
+│       ├── my_first_dbt_model.sql
+│       ├── my_second_dbt_model.sql
+│       └── schema.yml
+├── seeds
+├── snapshots
+└── tests 
+       Create a source 
+       The next step is to create a source table definition. We add models/source_tables.yml with the following contents: 
+        version: 2
+sources:
+  - name: data_source
+    schema: nyctaxi
+    tables:
+      - name: records 
+       This source definition corresponds to the AWS Glue table nyctaxi.records, which we created in the CloudFormation stack. 
+       Create models 
+       In this step, we create a dbt model that represents the average values for trip duration, passenger count, trip distance, and total amount of charges. Complete the following steps: 
+        Create the models/silver/ directory. 
+        Create the file models/silver/silver_avg_metrics.sql with the following contents: 
+          WITH source_avg as ( 
+    SELECT avg((CAST(dropoff_datetime as LONG) - CAST(pickup_datetime as LONG))/60) as avg_duration 
+    , avg(passenger_count) as avg_passenger_count 
+    , avg(trip_distance) as avg_trip_distance 
+    , avg(total_amount) as avg_total_amount
+    , year
+    , month 
+    , type
+    FROM {{ source('data_source', 'records') }} 
+    WHERE year = "2016"
+    AND dropoff_datetime is not null 
+    GROUP BY year, month, type
+) 
+SELECT *
+FROM source_avg 
+        Create the file models/silver/schema.yml with the following contents: 
+          version: 2
+models:
+  - name: silver_avg_metrics
+    description: This table has basic metrics based on NYC Taxi Open Data for the year 2016
+    columns:
+      - name: avg_duration
+        description: The average duration of a NYC Taxi trip
+      - name: avg_passenger_count
+        description: The average number of passenger per NYC Taxi trip
+      - name: avg_trip_distance
+        description: The average NYC Taxi trip distance
+      - name: avg_total_amount
+        description: The avarage amount of a NYC Taxi trip
+      - name: year
+        description: The year of the NYC Taxi trip
+      - name: month
+        description: The month of the NYC Taxi trip 
+      - name: type
+        description: The type of the NYC Taxi  
+        Create the models/gold/ directory. 
+        Create the file models/gold/gold_cost_metrics.sql with the following contents: 
+          {{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=["year", "month", "type"],
+    file_format='iceberg',
+    iceberg_expire_snapshots='False',
+    table_properties={'format-version': '2'}
+) }}
+SELECT (avg_total_amount/avg_trip_distance) as avg_cost_per_distance
+, (avg_total_amount/avg_duration) as avg_cost_per_minute
+, year
+, month 
+, type 
+FROM {{ ref('silver_avg_metrics') }} 
+        Create the file models/gold/gold_passengers_metrics.sql with the following contents: 
+          {{ config(
+    materialized='incremental',
+    incremental_strategy='merge',
+    unique_key=["year", "month", "type"],
+    file_format='iceberg',
+    iceberg_expire_snapshots='False',
+    table_properties={'format-version': '2'}
+) }}
+SELECT (avg_total_amount/avg_passenger_count) as avg_cost_per_passenger
+, (avg_duration/avg_passenger_count) as avg_duration_per_passenger
+, (avg_trip_distance/avg_passenger_count) as avg_trip_distance_per_passenger
+, year
+, month 
+, type 
+FROM {{ ref('silver_avg_metrics') }} 
+        Create the file models/gold/schema.yml with the following contents: 
+          version: 2
+models:
+  - name: gold_cost_metrics
+    description: This table has metrics per cost based on NYC Taxi Open Data
+    columns:
+      - name: avg_cost_per_distance
+        description: The average cost per distance of a NYC Taxi trip
+      - name: avg_cost_per_minute
+        description: The average cost per minute of a NYC Taxi trip
+      - name: year
+        description: The year of the NYC Taxi trip
+      - name: month
+        description: The month of the NYC Taxi trip
+      - name: type
+        description: The type of the NYC Taxi
+  - name: gold_passengers_metrics
+    description: This table has metrics per passenger based on NYC Taxi Open Data
+    columns:
+      - name: avg_cost_per_passenger
+        description: The average cost per passenger for a NYC Taxi trip
+      - name: avg_duration_per_passenger
+        description: The average number of passenger per NYC Taxi trip
+      - name: avg_trip_distance_per_passenger
+        description: The average NYC Taxi trip distance
+      - name: year
+        description: The year of the NYC Taxi trip
+      - name: month
+        description: The month of the NYC Taxi trip 
+      - name: type
+        description: The type of the NYC Taxi 
+        Remove the models/example/ folder, because it’s just an example created in the dbt init command. 
+       Configure the dbt project 
+       dbt_project.yml is a key configuration file for dbt projects. It contains the following code: 
+        models:
+  dbt_glue_demo:
+    # Config indicated by + and applies to all files under models/example/
+    example:
+      +materialized: view 
+       We configure dbt_project.yml to replace the preceding code with the following: 
+        models:
+  dbt_glue_demo:
+    silver:
+      +materialized: table 
+       This is because that we want to materialize the models under silver as Parquet tables. 
+       Configure a dbt profile 
+       A dbt profile is a configuration that specifies how to connect to a particular database. The profiles are defined in the profiles.yml file within a dbt project. 
+       Complete the following steps to configure a dbt profile: 
+        Create the profiles directory. 
+        Create the file profiles/profiles.yml with the following contents: 
+          dbt_glue_demo:
+  target: dev
+  outputs:
+    dev:
+      type: glue
+      query-comment: demo-nyctaxi
+      role_arn: "{{ env_var('DBT_ROLE_ARN') }}"
+      region: us-east-1
+      workers: 5
+      worker_type: G.1X
+      schema: "dbt_glue_demo_nyc_metrics"
+      database: "dbt_glue_demo_nyc_metrics"
+      session_provisioning_timeout_in_seconds: 120
+      location: "{{ env_var('DBT_S3_LOCATION') }}" 
+        Create the profiles/iceberg/ directory. 
+        Create the file profiles/iceberg/profiles.yml with the following contents: 
+          dbt_glue_demo:
+  target: dev
+  outputs:
+    dev:
+      type: glue
+      query-comment: demo-nyctaxi
+      role_arn: "{{ env_var('DBT_ROLE_ARN') }}"
+      region: us-east-1
+      workers: 5
+      worker_type: G.1X
+      schema: "dbt_glue_demo_nyc_metrics"
+      database: "dbt_glue_demo_nyc_metrics"
+      session_provisioning_timeout_in_seconds: 120
+      location: "{{ env_var('DBT_S3_LOCATION') }}"
+      datalake_formats: "iceberg"
+      conf: spark.sql.catalog.glue_catalog=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.glue_catalog.warehouse={{ env_var('DBT_S3_LOCATION') }}warehouse/ --conf spark.sql.catalog.glue_catalog.catalog-impl=org.apache.iceberg.aws.glue.GlueCatalog --conf spark.sql.catalog.glue_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions 
+       The last two lines are added for setting Iceberg configurations on AWS Glue interactive sessions. 
+       Run the dbt project 
+       Now it’s time to run the dbt project. Complete the following steps: 
+        To run the project dbt, you should be in the project folder: 
+          $ cd dbt_glue_demo 
+        The project requires you to set environment variables in order to run on the AWS account: 
+          $ export DBT_ROLE_ARN="arn:aws:iam::$(aws sts get-caller-identity --query "Account" --output text):role/GlueInteractiveSessionRole"
+$ export DBT_S3_LOCATION="s3://aws-dbt-glue-datalake-$(aws sts get-caller-identity --query "Account" --output text)-us-east-1" 
+        Make sure the profile is set up correctly from the command line: 
+          $ dbt debug --profiles-dir profiles
+...
+05:34:22 Connection test: [OK connection ok]
+05:34:22 All checks passed! 
+       If you see any failures, check if you provided the correct IAM role ARN and S3 location in Step 2. 
+        Run the models with the following code: 
+          $ dbt run -m silver --profiles-dir profiles
+$ dbt run -m gold --profiles-dir profiles/iceberg/ 
+       Now the tables are successfully created in the SageMaker Lakehouse Catalog, and the data is materialized in the Amazon S3 location. 
+       You can verify those tables by opening the AWS Glue console, choosing Databases in the navigation pane, and opening dbt_glue_demo_nyc_metrics. 
+       Query materialized tables through Athena 
+       Let’s query the target table using Athena to verify the materialized tables. Complete the following steps: 
+        On the Athena console, switch the workgroup to athena-dbt-glue-aws-blog. 
+        If the workgroup athena-dbt-glue-aws-blog settings dialog box appears, choose Acknowledge. 
+        Use the following query to explore the metrics created by the dbt project: 
+          SELECT cm.avg_cost_per_minute
+    , cm.avg_cost_per_distance
+    , pm.avg_cost_per_passenger
+    , cm.year
+    , cm.month
+    , cm.type
+FROM "dbt_glue_demo_nyc_metrics"."gold_passengers_metrics" pm
+LEFT JOIN "dbt_glue_demo_nyc_metrics"."gold_cost_metrics" cm
+    ON cm.type = pm.type
+    AND cm.year = pm.year
+    AND cm.month = pm.month
+WHERE cm.type = 'yellow'
+    AND cm.year = '2016'
+    AND cm.month = '6' 
+       The following screenshot shows the results of this query. 
+       Review dbt documentation 
+       Complete the following steps to review your documentation: 
+        Generate the following documentation for the project: 
+          $ dbt docs generate --profiles-dir profiles/iceberg
+11:41:51  Running with dbt=1.7.1
+11:41:51  Registered adapter: glue=1.7.1
+11:41:51  Unable to do partial parsing because profile has changed
+11:41:52  Found 3 models, 1 source, 0 exposures, 0 metrics, 478 macros, 0 groups, 0 semantic models
+11:41:52  
+11:41:53  Concurrency: 1 threads (target='dev')
+11:41:53  
+11:41:53  Building catalog
+11:43:32  Catalog written to /Users/username/Documents/workspace/dbt_glue_demo/target/catalog.json 
+        Run the following command to open the documentation on your browser: 
+          $ dbt docs serve --profiles-dir profiles/iceberg 
+        In the navigation pane, choose gold_cost_metrics under dbt_glue_demo/models/gold. 
+       You can see the detailed view of the model gold_cost_metrics, as shown in the following screenshot. 
+        To see the lineage graph, choose the circle icon at the bottom right.  
+       Clean up 
+       To clean up your environment, complete the following steps: 
+        Delete the database created by dbt: 
+          $ aws glue delete-database —name dbt_glue_demo_nyc_metrics 
+        Delete all generated data: 
+          $ aws s3 rm s3://aws-dbt-glue-datalake-$(aws sts get-caller-identity —query "Account" —output text)-us-east-1/ —recursive
+$ aws s3 rm s3://aws-athena-dbt-glue-query-results-$(aws sts get-caller-identity —query "Account" —output text)-us-east-1/ —recursive 
+        Delete the CloudFormation stack: 
+          $ aws cloudformation delete-stack —stack-name dbt-demo 
+       Conclusion 
+       This post demonstrated how the dbt-glue adapter helps your workload, and how you can build a modern data stack using dbt and AWS Glue using the dbt-glue adapter. You learned the end-to-end operations and data flow for data engineers to build and manage a data stack using dbt and the dbt-glue adapter. To report issues or request a feature enhancement, feel free to open an issue on GitHub. 
+       About the authors 
+       Noritaka Sekiyama is a Principal Big Data Architect on the AWS Glue team at Amazon Web Services. He works based in Tokyo, Japan. He is responsible for building software artifacts to help customers. In his spare time, he enjoys cycling with his road bike. 
+       Benjamin Menuet is a Senior Data Architect on the AWS Professional Services team at Amazon Web Services. He helps customers develop data and analytics solutions to accelerate their business outcomes. Outside of work, Benjamin is a trail runner and has finished some iconic races like the UTMB. 
+       Akira Ajisaka is a Senior Software Development Engineer on the AWS Glue team. He likes open source software and distributed systems. In his spare time, he enjoys playing arcade games. 
+       Kinshuk Pahare is a Principal Product Manager on the AWS Glue team at Amazon Web Services. 
+       Jason Ganz is the manager of the Developer Experience (DX) team at dbt Labs 
+        Loading comments… 

@@ -1,0 +1,17 @@
+sample_json_model.sql
+sample-query.sql
+sample-view.sql
+
+# dbt
+target/
+dbt_packages/
+logs/
+.env
+
+# Python
+dbt-glue-env/
+__pycache__/
+*.pyc
+
+# AWS
+.aws/

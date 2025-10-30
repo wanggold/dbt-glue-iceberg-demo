@@ -1,0 +1,17 @@
+dbt_glue_json:
+  target: dev
+  outputs:
+    dev:
+      type: glue
+      query-comment: json-comparison-demo
+      role_arn: "{{ env_var('DBT_ROLE_ARN') }}"
+      region: us-east-1
+      workers: 5
+      worker_type: G.1X
+      schema: "dbt_glue_json_comparison"
+      database: "dbt_glue_json_comparison"
+      session_provisioning_timeout_in_seconds: 120
+      location: "{{ env_var('DBT_S3_LOCATION') }}"
+      # Enable session reuse for performance testing
+      glue_session_reuse: true
+      idle_timeout: 30

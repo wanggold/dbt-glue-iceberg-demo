@@ -1,0 +1,32 @@
+
+# Name your project! Project names should contain only lowercase characters
+# and underscores. A good package name should reflect your organization's
+# name or the intended use of these models
+name: 'dbt_glue_json'
+version: '1.0.0'
+profile: 'dbt_glue_json'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  dbt_glue_json:
+    # All models create individual Iceberg tables for timing comparison
+    legacy:
+      +materialized: table
+      +table_type: iceberg
+    optimized:
+      +materialized: table
+      +table_type: iceberg
+    # Warm-up model
+    warmup:
+      +materialized: table
+      +table_type: iceberg
